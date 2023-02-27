@@ -58,7 +58,7 @@ public:
      *  \param [in] config  Pointer to the loaded configuration
      *
      */
-    BMPListener(Logger *logPtr, Config *config);
+    BMPListener(::Logger *logPtr, Config *config);
 
     virtual ~BMPListener();
 
@@ -91,7 +91,7 @@ public:
 
 
 public:
-    Logger      *logger;                    ///< Logging class pointer
+    ::Logger      *logger;                    ///< Logging class pointer
 
 private:
     Config      *cfg;                       ///< Config pointer

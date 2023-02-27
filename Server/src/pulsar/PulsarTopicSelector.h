@@ -7,15 +7,18 @@
  *
  */
 
-#ifndef OPENBMP_KAFKATOPICSELECTOR_H
-#define OPENBMP_KAFKATOPICSELECTOR_H
+#ifndef OPENBMP_PULSARTOPICSELECTOR_H
+#define OPENBMP_PULSARTOPICSELECTOR_H
 
-#include <librdkafka/rdkafkacpp.h>
+// #include <librdkafka/rdkafkacpp.h>
 #include "Config.h"
 #include "Logger.h"
-#include "KafkaPeerPartitionerCallback.h"
+// #include "KafkaPeerPartitionerCallback.h"
+#include <pulsar/Client.h>
 
-class KafkaTopicSelector {
+using namespace pulsar;
+
+class PulsarTopicSelector {
 public:
     /**
      * MSGBUS_TOPIC_* defines the default topic names
@@ -56,14 +59,14 @@ public:
      *
      * \param [in] logPtr   Pointer to Logger instance
      * \param [in] cfg      Pointer to the config instance
-     * \param [in] producer Pointer to the kafka producer
+     * \param [in] client   Pointer to the pulsar client
      ***********************************************************************/
-    KafkaTopicSelector(Logger *logPtr, Config *cfg,  RdKafka::Producer *producer);
+    PulsarTopicSelector(::Logger *logPtr, Config *cfg,  Client *client);
 
     /*********************************************************************//**
      * Destructor for class
      ***********************************************************************/
-    ~KafkaTopicSelector();
+    ~PulsarTopicSelector();
 
     /*********************************************************************//**
      * Gets topic pointer by topic var name, router and peer group.  If the topic doesn't exist, a new entry
@@ -74,9 +77,9 @@ public:
      * \param [in]  peer_group      Peer group - empty/NULL means no peer group
      * \param [in]  peer_asn        Peer asn (remote asn)
      *
-     * \return (RdKafka::Topic *) pointer or NULL if error
+     * \return (pulsar::Producer *) pointer or NULL if error
      ***********************************************************************/
-    RdKafka::Topic * getTopic(const std::string &topic_var, const std::string *router_group,
+    Producer * getProducer(const std::string &topic_var, const std::string *router_group,
                               const std::string *peer_group,
                               uint32_t peer_asn);
 
@@ -116,18 +119,17 @@ public:
 
 private:
     Config          *cfg;                       ///< Configuration instance
-    Logger          *logger;                    ///< Logging class pointer
+    ::Logger        *logger;                    ///< Logging class pointer
     bool            debug;                      ///< debug flag to indicate debugging
 
+    std::string     topicPrefix;
 
-    RdKafka::Producer *producer;                ///< Kafka Producer instance
-    RdKafka::Conf     *tconf;                   ///< rdkafka topic level configuration
-
-    ///< Partition callback for peer
-    KafkaPeerPartitionerCallback *peer_partitioner_callback;
+    ProducerConfiguration *producerConf;         // pulsar Producer Configuration
+    Client *  client;
+    
 
     /**
-     * Topic name to rdkafka pointer map (key=Name, value=topic pointer)
+     * Topic name to pulsar producer pointer map (key=Name, value=producer pointer)
      *
      *      Key will be MSGBUS_TOPIC_VAR_<topic>_<router_group>_<peer_group>[_<peer_asn>]
      *          Keys will not contain the optional values unless topic_flags_map includes them.
@@ -138,8 +140,10 @@ private:
      *          unicast_prefix__peergrp1_ (router group is empty but peer group is defined)
      *          unicast_prefix_routergrp1_peergroup1_ (both router and peer groups are defiend)
      */
-    typedef std::map<std::string, RdKafka::Topic *> topic_map;
-    std::map<std::string, RdKafka::Topic*> topic;
+    
+    typedef std::map<std::string,  Producer*> t_producer_map;
+    
+    t_producer_map producerMap;
 
 
     /**
@@ -153,7 +157,7 @@ private:
     /**
      * Free allocated topic map pointers
      */
-    void freeTopicMap();
+    void freeProducerMap();
 
     /**
      * Initialize topic
@@ -165,9 +169,9 @@ private:
      * \param [in]  peer_group      Peer group - empty/NULL means no peer group
      * \param [in]  peer_asn        Peer asn (remote asn)
      *
-     * \return  (RdKafka::Topic *) pointer or NULL if error
+     * \return  (pulsar::Producer *) pointer or NULL if error
      */
-    RdKafka::Topic * initTopic(const std::string &topic_var,
+    Producer * initProducer(const std::string &topic_var,
                                const std::string *router_group, const std::string *peer_group,
                                uint32_t peer_asn);
 
@@ -189,4 +193,4 @@ private:
 };
 
 
-#endif //OPENBMP_KAFKATOPICSELECTOR_H
+#endif //OPENBMP_PULSARTOPICSELECTOR_H

@@ -21,7 +21,7 @@
 #include <boost/algorithm/string/replace.hpp>
 
 #include "Config.h"
-#include "kafka/KafkaTopicSelector.h"
+#include "pulsar/PulsarTopicSelector.h"
 
 /*********************************************************************//**
  * Constructor for class
@@ -40,7 +40,7 @@ Config::Config() {
     bind_ipv4           = "";
     bind_ipv6           = "";
     heartbeat_interval  = 60 * 5;        // Default is 5 minutes
-    kafka_brokers       = "localhost:9092";
+    brokers             = "localhost:9092";
     tx_max_bytes        = 1000000;
     rx_max_bytes        = 100000000;
     socket_timeout	    = 60000; 	// Default is 60 seconds
@@ -57,7 +57,7 @@ Config::Config() {
     bzero(admin_id, sizeof(admin_id));
 
     /*
-     * Initialized the kafka topic names
+     * Initialized the topic names
      *      The keys match the configuration node/vars. Topic name nodes will be ignored if
      *      not initialized here.
      */
@@ -370,20 +370,20 @@ void Config::parseKafka(const YAML::Node &node) {
     std::string value;
 
     if (node["brokers"] && node["brokers"].Type() == YAML::NodeType::Sequence) {
-        kafka_brokers.clear();
+        brokers.clear();
 
         for (std::size_t i = 0; i < node["brokers"].size(); i++) {
             value = node["brokers"][i].Scalar();
 
             if (value.size() > 0) {
-                if (kafka_brokers.size() > 0)
-                    kafka_brokers.append(",");
+                if (brokers.size() > 0)
+                    brokers.append(",");
 
-                kafka_brokers.append(value);
+                brokers.append(value);
             }
 
             if (debug_general)
-                std::cout << "   Config: kafka.brokers = " << kafka_brokers << "\n";
+                std::cout << "   Config: kafka.brokers = " << brokers << "\n";
         }
     }
 

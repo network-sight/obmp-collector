@@ -7,7 +7,17 @@ else()
     set(SSL_LIBS )
 endif()
 
+# find_package(OpenSSL REQUIRED)
+# message("OPENSSL_INCLUDE_DIR: " ${OPENSSL_INCLUDE_DIR})
+# message("OPENSSL_LIBRARIES: " ${OPENSSL_LIBRARIES})
 
+find_package(Protobuf REQUIRED)
+message("Protobuf_INCLUDE_DIRS: " ${Protobuf_INCLUDE_DIRS})
+message("Protobuf_LIBRARIES: " ${Protobuf_LIBRARIES})
+
+find_package(CURL REQUIRED)
+message("CURL_INCLUDE_DIRS: " ${CURL_INCLUDE_DIRS})
+message("CURL_LIBRARIES: " ${CURL_LIBRARIES})
 
 # Find and set the env for the mysql c++ connector
 set(HINT_ROOT_DIR
@@ -33,25 +43,17 @@ find_library(LIBYAML_CPP_LIBRARY
         lib64
         lib)
 
-find_path(LIBRDKAFKA_INCLUDE_DIR
-        librdkafka/rdkafkacpp.h
+find_path(LIBPULSAR_INCLUDE_DIR
+        pulsar/Client.h
         HINTS
         ${HINT_ROOT_DIR}
         PATH_SUFFIXES
         include)
 
-find_library(LIBRDKAFKA_LIBRARY
+# libpulsarwithdeps.a pulsar        
+find_library(LIBPULSAR_LIBRARY
         NAMES
-        librdkafka.a rdkafka
-        HINTS
-        ${HINT_ROOT_DIR}
-        PATH_SUFFIXES
-        lib64
-        lib)
-
-find_library(LIBRDKAFKA_CPP_LIBRARY
-        NAMES
-        librdkafka++.a rdkafka++
+        pulsar
         HINTS
         ${HINT_ROOT_DIR}
         PATH_SUFFIXES
@@ -86,11 +88,13 @@ find_library(LIBLZ4_LIBRARY
         lib)
 
 
-if (NOT LIBRDKAFKA_INCLUDE_DIR OR NOT LIBRDKAFKA_LIBRARY OR NOT LIBRDKAFKA_CPP_LIBRARY)
-	Message (FATAL_ERROR "Librdkafka was not found, cannot proceed.  Visit https://github.com/edenhill/librdkafka for details on how to install it.")
+
+if (NOT LIBPULSAR_INCLUDE_DIR OR NOT LIBPULSAR_LIBRARY )
+	Message (FATAL_ERROR "libpulsar was not found, cannot proceed. ")
 #else ()
-#	Message ("lib = " ${LIBRDKAFKA_LIBRARY})
+#	Message ("lib = " ${LIBPULSAR_LIBRARY})
 endif()
+
 
 if (NOT LIBYAML_CPP_INCLUDE_DIR OR NOT LIBYAML_CPP_LIBRARY)
     Message (FATAL_ERROR "Libyaml-cpp was not found, cannot proceed.  Visit https://github.com/jbeder/yaml-cpp for install details.")
@@ -101,7 +105,9 @@ if (NOT LIBRT_LIBRARY AND NOT MACOSX)
 endif()
 
 # Update the include dir
-include_directories(${LIBRDKAFKA_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ src/bmp src/bgp src/bgp/linkstate src/kafka)
+# include_directories(${LIBRDKAFKA_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ src/bmp src/bgp src/bgp/linkstate src/kafka src/pulsar)
+include_directories(${LIBPULSAR_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ src/bmp src/bgp src/bgp/linkstate src/pulsar)
+
 #link_directories(${LIBRDKAFKA_LIBRARY})
 
 
@@ -109,12 +115,9 @@ include_directories(${LIBRDKAFKA_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ sr
 set (SRC_FILES
 	src/bmp/BMPListener.cpp
 	src/bmp/BMPReader.cpp
-	src/kafka/MsgBusImpl_kafka.cpp
-	src/kafka/KafkaEventCallback.cpp
-	src/kafka/KafkaDeliveryReportCallback.cpp
-    src/kafka/KafkaTopicSelector.cpp
-    src/kafka/KafkaPeerPartitionerCallback.cpp
-	src/openbmp.cpp
+	src/pulsar/MsgBusImpl_pulsar.cpp
+    src/pulsar/PulsarTopicSelector.cpp
+    src/openbmp.cpp
 	src/bmp/parseBMP.cpp
 	src/md5.cpp
 	src/Logger.cpp
@@ -153,12 +156,13 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
 endif()
 
 # Set the libs to link
-set (LIBS pthread ${LIBYAML_CPP_LIBRARY} ${LIBRDKAFKA_CPP_LIBRARY} ${LIBRDKAFKA_LIBRARY} z ${SSL_LIBS} ${LIBLZ4_LIBRARY} ${LIBZSTD_LIBRARY} dl)
+set (LIBS pthread ${LIBYAML_CPP_LIBRARY} ${LIBPULSAR_LIBRARY}  z ${SSL_LIBS} ${LIBLZ4_LIBRARY} ${LIBZSTD_LIBRARY} dl crypto )
 
 # Set the binary
 add_executable (openbmpd ${SRC_FILES})
 
 # Link the binary
+# message("link_libraries : " ${LIBS})
 target_link_libraries (openbmpd ${LIBS})
 
 if (LIBRT_LIBRARY)

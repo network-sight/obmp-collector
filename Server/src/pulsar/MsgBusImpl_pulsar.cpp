@@ -12,29 +12,24 @@
 
 #include <cinttypes>
 
-#include <librdkafka/rdkafkacpp.h>
 #include <netdb.h>
 #include <unistd.h>
 
 #include <thread>
 #include <arpa/inet.h>
 
-#include "MsgBusImpl_kafka.h"
-#include "KafkaEventCallback.h"
-#include "KafkaDeliveryReportCallback.h"
-#include "KafkaTopicSelector.h"
+#include "MsgBusImpl_pulsar.h"
+#include "PulsarTopicSelector.h"
 
 #include <boost/algorithm/string/replace.hpp>
 
-#include <librdkafka/rdkafka.h>
-
-
 #include "md5.h"
 
-using namespace std;
+
+using namespace pulsar;
 
 /******************************************************************//**
- * \brief This function will initialize and connect to Kafka.
+ * \brief This function will initialize and connect to pulsar.
  *
  * \details It is expected that this class will start off with a new connection.
  *
@@ -42,7 +37,7 @@ using namespace std;
  *  \param [in] cfg         Pointer to the config instance
  *  \param [in] c_hash_id   Collector Hash ID
  ********************************************************************/
-msgBus_kafka::msgBus_kafka(Logger *logPtr, Config *cfg, u_char *c_hash_id) {
+msgBus_pulsar::msgBus_pulsar(::Logger *logPtr, Config *cfg, u_char *c_hash_id) {
     logger = logPtr;
 
     producer_buf = new unsigned char[MSGBUS_WORKING_BUF_SIZE];
@@ -51,7 +46,6 @@ msgBus_kafka::msgBus_kafka(Logger *logPtr, Config *cfg, u_char *c_hash_id) {
     hash_toStr(c_hash_id, collector_hash);
 
     isConnected = false;
-    conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
     disableDebug();
 
@@ -71,13 +65,13 @@ msgBus_kafka::msgBus_kafka(Logger *logPtr, Config *cfg, u_char *c_hash_id) {
 
     this->cfg           = cfg;
 
-    // Make the connection to the server
-    event_callback       = NULL;
-    delivery_callback    = NULL;
-    producer             = NULL;
+    client              = NULL;
     topicSel             = NULL;
 
+    pulsarUrl = "pulsar://" + cfg->brokers;
+
     router_ip.assign("");
+
     bzero(router_hash, sizeof(router_hash));
 
     connect();
@@ -86,9 +80,9 @@ msgBus_kafka::msgBus_kafka(Logger *logPtr, Config *cfg, u_char *c_hash_id) {
 /**
  * Destructor
  */
-msgBus_kafka::~msgBus_kafka() {
+msgBus_pulsar::~msgBus_pulsar() {
 
-    SELF_DEBUG("Destroy msgBus Kafka instance");
+    SELF_DEBUG("Destroy msgBus pulsar instance");
 
     // Disconnect/term the router if not already done
     MsgBusInterface::obj_router r_object;
@@ -108,7 +102,7 @@ msgBus_kafka::~msgBus_kafka() {
         snprintf(r_object.term_reason_text, sizeof(r_object.term_reason_text),
                  "Connection closed");
 
-        update_Router(r_object, msgBus_kafka::ROUTER_ACTION_TERM);
+        update_Router(r_object, msgBus_pulsar::ROUTER_ACTION_TERM);
     }
 
     sleep(2);
@@ -120,227 +114,58 @@ msgBus_kafka::~msgBus_kafka() {
 
     disconnect(500);
 
-    delete conf;
+ 
 }
 
 /**
- * Disconnect from Kafka
+ * Disconnect from pulsar
  */
-void msgBus_kafka::disconnect(int wait_ms) {
+void msgBus_pulsar::disconnect(int wait_ms) {
 
     if (isConnected) {
-        int i = 0;
-        while (producer->outq_len() > 0 and i < 30) {
-            LOG_INFO("Waiting for producer to finish before disconnecting: outq=%d", producer->outq_len());
-            producer->poll(500);
-            i++;
-        }
+        if (client != NULL) client->close();
     }
 
 
-    if (producer != NULL) producer->flush(5000);
-
     if (topicSel != NULL) delete topicSel;
-
     topicSel = NULL;
 
-    if (producer != NULL) delete producer;
-    producer = NULL;
-
-    // suggested by librdkafka to free memory
-    RdKafka::wait_destroyed(wait_ms);
-
-    if (event_callback != NULL) delete event_callback;
-    event_callback = NULL;
-
-    if (delivery_callback != NULL) delete delivery_callback;
-    delivery_callback = NULL;
+    if (client != NULL) delete client;
+    client = NULL;
 
     isConnected = false;
 }
 
 /**
- * Connects to Kafka broker
+ * Connects to pulsar broker
  */
-void msgBus_kafka::connect() {
+void msgBus_pulsar::connect() {
+    
     string errstr;
     string value;
-    std::ostringstream rx_bytes, tx_bytes, sess_timeout, socket_timeout;
-    std::ostringstream q_buf_max_msgs, q_buf_max_kbytes, q_buf_max_ms,
-		msg_send_max_retry, retry_backoff_ms;
 
     disconnect();
 
-    /*
-     * Configure Kafka Producer (https://kafka.apache.org/08/configuration.html)
-     */
-    //TODO: Add config options to change these settings
-
-    // Disable logging of connection close/idle timeouts caused by Kafka 0.9.x (connections.max.idle.ms)
-    //    See https://github.com/edenhill/librdkafka/issues/437 for more details.
-    // TODO: change this when librdkafka has better handling of the idle disconnects
-    value = "false";
-    if (conf->set("log.connection.close", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure log.connection.close=false: %s.", errstr.c_str());
-    }
-
-    value = "true";
-    if (conf->set("api.version.request", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure api.version.request=true: %s.", errstr.c_str());
-    }
-
-    // TODO: Add config for address family - default is any
-    /*value = "v4";
-    if (conf->set("broker.address.family", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure broker.address.family: %s.", errstr.c_str());
-    }*/
-
-
-    // Batch message number
-    value = "100";
-    if (conf->set("batch.num.messages", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure batch.num.messages for kafka: %s.", errstr.c_str());
-        throw "ERROR: Failed to configure kafka batch.num.messages";
-    }
-
-    // Batch message max wait time (in ms)
-    q_buf_max_ms << cfg->q_buf_max_ms;
-    if (conf->set("queue.buffering.max.ms", q_buf_max_ms.str(), errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure queue.buffering.max.ms for kafka: %s.", errstr.c_str());
-        throw "ERROR: Failed to configure kafka queue.buffer.max.ms";
-    }
-
-
-    // compression
-    value = cfg->compression;
-    if (conf->set("compression.codec", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure %s compression for kafka: %s.", value.c_str(), errstr.c_str());
-        throw "ERROR: Failed to configure kafka compression";
-    }
-
-    // broker list
-    if (conf->set("metadata.broker.list", cfg->kafka_brokers, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure broker list for kafka: %s", errstr.c_str());
-        throw "ERROR: Failed to configure kafka broker list";
-    }
-
-    // Maximum transmit byte size
-    tx_bytes << cfg->tx_max_bytes;
-    if (conf->set("message.max.bytes", tx_bytes.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK) 
-    {
-       LOG_ERR("Failed to configure transmit max message size for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure transmit max message size";
-    } 
- 
-    // Maximum receive byte size
-    rx_bytes << cfg->rx_max_bytes;
-    if (conf->set("receive.message.max.bytes", rx_bytes.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK)
-    {
-       LOG_ERR("Failed to configure receive max message size for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure receive max message size";
-    }
-
-    // Timeout for network requests
-    socket_timeout << cfg->socket_timeout;
-    if (conf->set("socket.timeout.ms", socket_timeout.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK) 
-    {
-       LOG_ERR("Failed to configure socket timeout for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure socket timeout ";
-    } 
-    
-    // Maximum number of messages allowed on the producer queue 
-    q_buf_max_msgs << cfg->q_buf_max_msgs;
-    if (conf->set("queue.buffering.max.messages", q_buf_max_msgs.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK) 
-    {
-       LOG_ERR("Failed to configure max messages in buffer for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure max messages in buffer ";
-    }
-
-    // Maximum number of messages allowed on the producer queue
-    q_buf_max_kbytes << cfg->q_buf_max_kbytes;
-    if (conf->set("queue.buffering.max.kbytes", q_buf_max_kbytes.str(),
-                  errstr) != RdKafka::Conf::CONF_OK)
-    {
-        LOG_ERR("Failed to configure max kbytes in buffer for kafka: %s",
-                errstr.c_str());
-        throw "ERROR: Failed to configure max kbytes in buffer ";
-    }
-
-
-    // How many times to retry sending a failing MessageSet
-    msg_send_max_retry << cfg->msg_send_max_retry;
-    if (conf->set("message.send.max.retries", msg_send_max_retry.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK) 
-    {
-       LOG_ERR("Failed to configure max retries for sending "
-               "failed message for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure max retries for sending failed message";
-    } 
-    
-    // Backoff time in ms before retrying a message send
-    retry_backoff_ms << cfg->retry_backoff_ms;
-    if (conf->set("retry.backoff.ms", retry_backoff_ms.str(), 
-                             errstr) != RdKafka::Conf::CONF_OK) 
-    {
-       LOG_ERR("Failed to configure backoff time before retrying to send"
-               "failed message for kafka: %s",
-                               errstr.c_str());
-       throw "ERROR: Failed to configure backoff time before resending"
-             " failed messages ";
-    } 
-    
-    // Register event callback
-    event_callback = new KafkaEventCallback(&isConnected, logger);
-    if (conf->set("event_cb", event_callback, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure kafka event callback: %s", errstr.c_str());
-        throw "ERROR: Failed to configure kafka event callback";
-    }
-
-    // Register delivery report callback
-    /*
-    delivery_callback = new KafkaDeliveryReportCallback();
-
-    if (conf->set("dr_cb", delivery_callback, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure kafka delivery report callback: %s", errstr.c_str());
-        throw "ERROR: Failed to configure kafka delivery report callback";
-    }
-    */
-
-
-    // Create producer and connect
-    producer = RdKafka::Producer::create(conf, errstr);
-    if (producer == NULL) {
-        LOG_ERR("rtr=%s: Failed to create producer: %s", router_ip.c_str(), errstr.c_str());
-        throw "ERROR: Failed to create producer";
+    // Create client and connect
+    client = new  Client(pulsarUrl);
+    if (client == NULL) {
+        LOG_ERR("rtr=%s: Failed to create client: %s", router_ip.c_str(), errstr.c_str());
+        throw "ERROR: Failed to create client";
     }
 
     isConnected = true;
 
-    // Poll for a few seconds to see if there are any errors or other events
-    for (int i=0; i < 10; i++) {
-        producer->poll(500);
-    }
 
     if (not isConnected) {
-        LOG_ERR("rtr=%s: Failed to connect to Kafka, will try again in a few", router_ip.c_str());
+        LOG_ERR("rtr=%s: Failed to connect to pulsar, will try again in a few", router_ip.c_str());
         return;
-
     }
 
     /*
      * Initialize the topic selector/handler
      */
     try {
-        topicSel = new KafkaTopicSelector(logger, cfg, producer);
+        topicSel = new PulsarTopicSelector(logger, cfg, client);
 
     } catch (char const *str) {
         LOG_ERR("rtr=%s: Failed to create one or more topics, will try again in a few: err=%s", router_ip.c_str(), str);
@@ -348,13 +173,13 @@ void msgBus_kafka::connect() {
         return;
     }
 
-    producer->poll(100);
+
 }
 
 /**
- * produce message to Kafka
+ * produce message to pulsar
  *
- * \param [in] topic_var     Topic var to use in KafkaTopicSelector::getTopic() MSGBUS_TOPIC_VAR_*
+ * \param [in] topic_var     Topic var to use in PulsarTopicSelector::getProducer() MSGBUS_TOPIC_VAR_*
  * \param [in] msg           message to produce
  * \param [in] msg_size      Length in bytes of the message
  * \param [in] rows          Number of rows
@@ -362,22 +187,16 @@ void msgBus_kafka::connect() {
  * \param [in] peer_group    Peer group name - empty/NULL if not set or used
  * \param [in] peer_asn      Peer ASN
  */
-void msgBus_kafka::produce(const char *topic_var, char *msg, size_t msg_size, int rows, string key,
+void msgBus_pulsar::produce(const char *topic_var, char *msg, size_t msg_size, int rows, string key,
                            const string *peer_group, uint32_t peer_asn) {
     size_t len;
-    RdKafka::Topic *topic = NULL;
+    
+    Producer * producer = NULL;
 
     while (isConnected == false or topicSel == NULL) {
-        // Do not attempt to reconnect if this is the main process (router ip is null)
-        // Changed on 10/29/15 to support docker startup delay with kafka
-        /*
-        if (router_ip.size() <= 0) {
-            return;
-        }*/
 
-        LOG_WARN("rtr=%s: Not connected to Kafka, attempting to reconnect", router_ip.c_str());
+        LOG_WARN("rtr=%s: Not connected to pulsar, attempting to reconnect", router_ip.c_str());
         connect();
-
         sleep(1);
     }
 
@@ -394,36 +213,35 @@ void msgBus_kafka::produce(const char *topic_var, char *msg, size_t msg_size, in
     memcpy(producer_buf+len, msg, msg_size);
 
 
-    topic = topicSel->getTopic(topic_var, &router_group_name, peer_group, peer_asn);
-    if (topic != NULL) {
-        SELF_DEBUG("rtr=%s: Producing message: topic=%s key=%s, msg size = %lu", router_ip.c_str(),
-                   topic->name().c_str(), key.c_str(), msg_size);
+    producer = topicSel->getProducer(topic_var, &router_group_name, peer_group, peer_asn);
+    if (producer != NULL) {
 
-        RdKafka::ErrorCode resp = producer->produce(topic, RdKafka::Topic::PARTITION_UA,
-                                                    RdKafka::Producer::RK_MSG_COPY,
-                                                    producer_buf, msg_size + len,
-                                                    (const std::string *) &key, NULL);
-        if (resp != RdKafka::ERR_NO_ERROR) {
-            if (resp == RdKafka::ERR__QUEUE_FULL) {
-              producer->poll(100);
+        SELF_DEBUG("rtr=%s: Producing message: topic=%s key=%s, msg size = %lu", router_ip.c_str(),
+                   producer->getTopic().c_str(), key.c_str(), msg_size);
+
+         // Send synchronously
+        Message message = MessageBuilder().setContent((char*) producer_buf).build();
+        Result result = producer->send(message);
+        
+        if (result != ResultOk) {
+            if (result == ResultProducerQueueIsFull) {
+               //retry send again
               produce(topic_var, msg, msg_size, rows, key, peer_group, peer_asn);
             } else {
-              LOG_ERR("rtr=%s: Failed to produce message: %s", router_ip.c_str(), RdKafka::err2str(resp).c_str());
+              LOG_ERR("rtr=%s: Failed to produce message: %s", router_ip.c_str(), strResult(result));
             }
-            producer->poll(100);
         }
     } else {
         LOG_NOTICE("rtr=%s: failed to produce message because topic couldn't be found: topic=%s key=%s, msg size = %lu", router_ip.c_str(),
                    topic_var, key.c_str(), msg_size);
     }
 
-    producer->poll(0);
 }
 
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_Collector(obj_collector &c_object, collector_action_code action_code) {
+void msgBus_pulsar::update_Collector(obj_collector &c_object, collector_action_code action_code) {
     char buf[4096]; // Misc working buffer
 
     string ts;
@@ -459,7 +277,7 @@ void msgBus_kafka::update_Collector(obj_collector &c_object, collector_action_co
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_Router(obj_router &r_object, router_action_code code) {
+void msgBus_pulsar::update_Router(obj_router &r_object, router_action_code code) {
     char buf[4096]; // Misc working buffer
 
     // Convert binary hash to string
@@ -540,7 +358,7 @@ void msgBus_kafka::update_Router(obj_router &r_object, router_action_code code) 
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_Peer(obj_bgp_peer &peer, obj_peer_up_event *up, obj_peer_down_event *down, peer_action_code code) {
+void msgBus_pulsar::update_Peer(obj_bgp_peer &peer, obj_peer_up_event *up, obj_peer_down_event *down, peer_action_code code) {
 
     char buf[4096]; // Misc working buffer
 
@@ -702,7 +520,7 @@ void msgBus_kafka::update_Peer(obj_bgp_peer &peer, obj_peer_up_event *up, obj_pe
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_baseAttribute(obj_bgp_peer &peer, obj_path_attr &attr, base_attr_action_code code) {
+void msgBus_pulsar::update_baseAttribute(obj_bgp_peer &peer, obj_path_attr &attr, base_attr_action_code code) {
 
     prep_buf[0] = 0;
     size_t  buf_len;                    // size of the message in buf
@@ -763,7 +581,7 @@ void msgBus_kafka::update_baseAttribute(obj_bgp_peer &peer, obj_path_attr &attr,
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_L3Vpn(obj_bgp_peer &peer, std::vector<obj_vpn> &vpn,
+void msgBus_pulsar::update_L3Vpn(obj_bgp_peer &peer, std::vector<obj_vpn> &vpn,
                                 obj_path_attr *attr, vpn_action_code code) {
 
     prep_buf[0] = 0;
@@ -890,7 +708,7 @@ void msgBus_kafka::update_L3Vpn(obj_bgp_peer &peer, std::vector<obj_vpn> &vpn,
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_eVPN(obj_bgp_peer &peer, std::vector<obj_evpn> &vpn,
+void msgBus_pulsar::update_eVPN(obj_bgp_peer &peer, std::vector<obj_evpn> &vpn,
                               obj_path_attr *attr, vpn_action_code code) {
 
     prep_buf[0] = 0;
@@ -1014,7 +832,7 @@ void msgBus_kafka::update_eVPN(obj_bgp_peer &peer, std::vector<obj_evpn> &vpn,
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_unicastPrefix(obj_bgp_peer &peer, std::vector<obj_rib> &rib,
+void msgBus_pulsar::update_unicastPrefix(obj_bgp_peer &peer, std::vector<obj_rib> &rib,
                                         obj_path_attr *attr, unicast_prefix_action_code code) {
     //bzero(prep_buf, MSGBUS_WORKING_BUF_SIZE);
     prep_buf[0] = 0;
@@ -1142,7 +960,7 @@ void msgBus_kafka::update_unicastPrefix(obj_bgp_peer &peer, std::vector<obj_rib>
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::add_StatReport(obj_bgp_peer &peer, obj_stats_report &stats) {
+void msgBus_pulsar::add_StatReport(obj_bgp_peer &peer, obj_stats_report &stats) {
     char buf[4096];                 // Misc working buffer
 
     // Build the query
@@ -1170,7 +988,7 @@ void msgBus_kafka::add_StatReport(obj_bgp_peer &peer, obj_stats_report &stats) {
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_LsNode(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_node> &nodes,
+void msgBus_pulsar::update_LsNode(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_node> &nodes,
                                   ls_action_code code) {
     bzero(prep_buf, MSGBUS_WORKING_BUF_SIZE);
 
@@ -1284,7 +1102,7 @@ void msgBus_kafka::update_LsNode(obj_bgp_peer &peer, obj_path_attr &attr, std::l
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_LsLink(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_link> &links,
+void msgBus_pulsar::update_LsLink(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_link> &links,
                                  ls_action_code code) {
     bzero(prep_buf, MSGBUS_WORKING_BUF_SIZE);
 
@@ -1453,7 +1271,7 @@ void msgBus_kafka::update_LsLink(obj_bgp_peer &peer, obj_path_attr &attr, std::l
 /**
  * Abstract method Implementation - See MsgBusInterface.hpp for details
  */
-void msgBus_kafka::update_LsPrefix(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_prefix> &prefixes,
+void msgBus_pulsar::update_LsPrefix(obj_bgp_peer &peer, obj_path_attr &attr, std::list<MsgBusInterface::obj_ls_prefix> &prefixes,
                                    ls_action_code code) {
     bzero(prep_buf, MSGBUS_WORKING_BUF_SIZE);
 
@@ -1597,10 +1415,10 @@ void msgBus_kafka::update_LsPrefix(obj_bgp_peer &peer, obj_path_attr &attr, std:
  *
  * TODO: Consolidate this to single produce method
  */
-void msgBus_kafka::send_bmp_raw(u_char *r_hash, obj_bgp_peer &peer, u_char *data, size_t data_len) {
+void msgBus_pulsar::send_bmp_raw(u_char *r_hash, obj_bgp_peer &peer, u_char *data, size_t data_len) {
     string r_hash_str;
     string p_hash_str;
-    RdKafka::Topic *topic = NULL;
+    Producer * producer = NULL;
 
     hash_toStr(peer.hash_id, p_hash_str);
     hash_toStr(r_hash, r_hash_str);
@@ -1609,9 +1427,8 @@ void msgBus_kafka::send_bmp_raw(u_char *r_hash, obj_bgp_peer &peer, u_char *data
         return;
 
     while (isConnected == false) {
-        LOG_WARN("rtr=%s: Not connected to Kafka, attempting to reconnect", router_ip.c_str());
+        LOG_WARN("rtr=%s: Not connected to pulsar, attempting to reconnect", router_ip.c_str());
         connect();
-
         sleep(2);
     }
 
@@ -1626,27 +1443,26 @@ void msgBus_kafka::send_bmp_raw(u_char *r_hash, obj_bgp_peer &peer, u_char *data
     memcpy(producer_buf, headers, hdr_len);
     memcpy(producer_buf+hdr_len, data, data_len);
 
-    topic = topicSel->getTopic(MSGBUS_TOPIC_VAR_BMP_RAW, &router_group_name, &peer_list[p_hash_str], peer.peer_as);
-    if (topic != NULL) {
+    producer = topicSel->getProducer(MSGBUS_TOPIC_VAR_BMP_RAW, &router_group_name, &peer_list[p_hash_str], peer.peer_as);
+    
+    if (producer != NULL) {
         SELF_DEBUG("rtr=%s: Producing bmp raw message: topic=%s key=%s, msg size = %lu", router_ip.c_str(),
-                   topic->name().c_str(), r_hash_str.c_str(), data_len);
+                   producer->getTopic().c_str(), r_hash_str.c_str(), data_len);
 
-        RdKafka::ErrorCode resp = producer->produce(topic, RdKafka::Topic::PARTITION_UA,
-                                                    RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-                                                    producer_buf, data_len + hdr_len,
-                                                    (const std::string *)&r_hash_str, NULL);
-
-        if (resp != RdKafka::ERR_NO_ERROR) {
-            LOG_ERR("rtr=%s: Failed to produce bmp raw message: %s", router_ip.c_str(), RdKafka::err2str(resp).c_str());
-            producer->poll(100);
+         // Send synchronously
+        Message message = MessageBuilder().setContent((char*) producer_buf).build();
+        Result result = producer->send(message);
+        
+        if (result != ResultOk) {
+            LOG_ERR("rtr=%s: Failed to produce bmp raw message: %s", router_ip.c_str(), strResult(result));
         }
+        
     }
     else {
         SELF_DEBUG("rtr=%s: failed to produce bmp raw message because topic couldn't be found: topic=%s key=%s, msg size = %lu",
                    router_ip.c_str(), MSGBUS_TOPIC_VAR_BMP_RAW, r_hash_str.c_str(), data_len);
     }
 
-    producer->poll(0);
 }
 
 /**
@@ -1657,7 +1473,7 @@ void msgBus_kafka::send_bmp_raw(u_char *r_hash, obj_bgp_peer &peer, u_char *data
 *
 *  \returns true if error, false if no error
 */
-bool msgBus_kafka::resolveIp(string name, string &hostname) {
+bool msgBus_pulsar::resolveIp(string name, string &hostname) {
     addrinfo *ai;
     char host[255];
 
@@ -1678,27 +1494,28 @@ bool msgBus_kafka::resolveIp(string name, string &hostname) {
 /*
  * Enable/disable debugs
  */
-void msgBus_kafka::enableDebug() {
+void msgBus_pulsar::enableDebug() {
     string value = "all";
     string errstr;
 
     disconnect();
 
-    if (conf->set("debug", value, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to enable debug on kafka producer confg: %s", errstr.c_str());
-    }
+    // if (conf->set("debug", value, errstr) != RdKafka::Conf::CONF_OK) {
+    //     LOG_ERR("Failed to enable debug on kafka producer confg: %s", errstr.c_str());
+    // }
+    // todo 
 
     connect();
 
     debug = true;
 
 }
-void msgBus_kafka::disableDebug() {
+void msgBus_pulsar::disableDebug() {
     string errstr;
     string value = "";
 
-    if (conf)
-        conf->set("debug", value, errstr);
+    // if (conf)
+    //     conf->set("debug", value, errstr);
 
     debug = false;
 }

@@ -10,7 +10,7 @@
 #ifndef CLIENT_THREAD_H_
 #define CLIENT_THREAD_H_
 
-#include "MsgBusImpl_kafka.h"
+#include "pulsar/MsgBusImpl_pulsar.h"
 #include "BMPListener.h"
 #include "Logger.h"
 #include "Config.h"
@@ -22,15 +22,16 @@ struct ThreadMgmt {
     pthread_t thr;
     BMPListener::ClientInfo client;
     Config *cfg;
-    Logger *log;
+    ::Logger *log;
     bool running;                       // true if running, zero if not running
     bool baselineTimeout;		        // true if past the baseline time of the router
 };
 
 struct ClientThreadInfo {
-    msgBus_kafka *mbus;
+    // msgBus_kafka *mbus;
+    msgBus_pulsar *mbus;
     BMPListener::ClientInfo *client;
-    Logger *log;
+    ::Logger *log;
 
     std::thread *bmp_reader_thread;
     int bmp_write_end_sock;

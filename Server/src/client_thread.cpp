@@ -29,7 +29,7 @@
  */
 void ClientThread_cancel(void *arg) {
     ClientThreadInfo *cInfo = static_cast<ClientThreadInfo *>(arg);
-    Logger *logger = cInfo->log;
+    ::Logger *logger = cInfo->log;
 
     if (not cInfo->closing) {
         cInfo->closing = true;
@@ -74,7 +74,7 @@ void ClientThread_cancel(void *arg) {
 void *ClientThread(void *arg) {
     // Setup the args
     ThreadMgmt *thr = static_cast<ThreadMgmt *>(arg);
-    Logger *logger = thr->log;
+    ::Logger *logger = thr->log;
 
     // Setup the client thread info struct
     ClientThreadInfo cInfo;
@@ -95,7 +95,7 @@ void *ClientThread(void *arg) {
 
     try {
         // connect to message bus
-        cInfo.mbus = new msgBus_kafka(logger, thr->cfg, thr->cfg->c_hash_id);
+        cInfo.mbus = new msgBus_pulsar(logger, thr->cfg, thr->cfg->c_hash_id);
 
         if (thr->cfg->debug_msgbus)
             cInfo.mbus->enableDebug();

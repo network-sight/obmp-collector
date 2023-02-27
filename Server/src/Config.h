@@ -33,7 +33,7 @@ public:
     u_char      c_hash_id[16];            ///< Collector Hash ID (raw format)
     char        admin_id[64];             ///< Admin ID
 
-    std::string kafka_brokers;            ///< metadata.broker.list
+    std::string brokers;                  ///< metadata.broker.list
     uint16_t    bmp_port;                 ///< BMP listening port
     std::string bind_ipv4;                ///< IP to listen on for IPv4
     std::string bind_ipv6;                ///< IP to listen on for IPv6

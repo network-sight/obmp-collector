@@ -1,14 +1,6 @@
-/*
- * Copyright (c) 2013-2016 Cisco Systems, Inc. and others.  All rights reserved.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Public License v1.0 which accompanies this distribution,
- * and is available at http://www.eclipse.org/legal/epl-v10.html
- *
- */
 
-#ifndef MSGBUSIMPL_KAFKA_H_
-#define MSGBUSIMPL_KAFKA_H_
+#ifndef MSGBUSIMPL_PULSAR_H_
+#define MSGBUSIMPL_PULSAR_H_
 
 #define HASH_SIZE 16
 
@@ -19,22 +11,20 @@
 #include <vector>
 #include <ctime>
 
-#include <librdkafka/rdkafkacpp.h>
+#include <pulsar/Client.h>
 
 #include <thread>
 #include "safeQueue.hpp"
-#include "KafkaEventCallback.h"
-#include "KafkaDeliveryReportCallback.h"
-#include "KafkaTopicSelector.h"
+#include "PulsarTopicSelector.h"
 
 #include "Config.h"
 
 /**
- * \class   msgBus_kafka
+ * \class   msgBus_pulsar
  *
- * \brief   Kafka message bus implementation
+ * \brief   pulsar message bus implementation
   */
-class msgBus_kafka: public MsgBusInterface {
+class msgBus_pulsar: public MsgBusInterface {
 public:
     #define MSGBUS_WORKING_BUF_SIZE         1800000
     #define MSGBUS_API_VERSION              "1.7"
@@ -48,8 +38,8 @@ public:
      *  \param [in] cfg         Pointer to the config instance
      *  \param [in] c_hash_id   Collector Hash ID
      ********************************************************************/
-    msgBus_kafka(Logger *logPtr, Config *cfg, u_char *c_hash_id);
-    ~msgBus_kafka();
+    msgBus_pulsar(::Logger *logPtr, Config *cfg, u_char *c_hash_id);
+    ~msgBus_pulsar();
 
     /*
      * abstract methods implemented
@@ -83,7 +73,7 @@ private:
     char            *prep_buf;                  ///< Large working buffer for message preparation
     unsigned char   *producer_buf;              ///< Producer message buffer
     bool            debug;                      ///< debug flag to indicate debugging
-    Logger          *logger;                    ///< Logging class pointer
+    ::Logger          *logger;                    ///< Logging class pointer
 
     std::string     collector_hash;             ///< collector hash string value
 
@@ -101,20 +91,8 @@ private:
 
     Config          *cfg;                       ///< Pointer to config instance
 
-    /**
-     * Kafka Configuration object (global)
-     */
-    RdKafka::Conf   *conf;
 
-    RdKafka::Producer *producer;                ///< Kafka Producer instance
-
-    /**
-     * Callback handlers
-     */
-    KafkaEventCallback              *event_callback;
-    KafkaDeliveryReportCallback     *delivery_callback;
-
-    bool isConnected;                           ///< Indicates if Kafka is connected or not
+    bool isConnected;                           ///< Indicates if pulsar client is connected or not
 
     // array of hashes
     std::map<std::string, std::string> peer_list;
@@ -125,22 +103,24 @@ private:
     std::string router_group_name;              ///< Router group name - if matched
 
 
-    std::map<std::string, RdKafka::Topic*> topic;
+    std::string  pulsarUrl;
 
-    KafkaTopicSelector *topicSel;               ///< Kafka topic selector/handler
+    Client  *client;
+    
+    PulsarTopicSelector *topicSel;               ///< Pulsar proceduer selector/handler
 
     /**
-     * Connects to kafka broker
+     * Connects to pulsar broker
      */
     void connect();
 
     /**
-     * Disconnects from kafka broker
+     * Disconnects from pulsar broker
      */
     void disconnect(int wait_ms=2000);
 
     /**
-     * produce message to Kafka
+     * produce message to pulsar
      *
      * \param [in] topic_var     Topic var to use in KafkaTopicSelector::getTopic()
      * \param [in] msg           message to produce
@@ -166,4 +146,4 @@ private:
 
 };
 
-#endif /* MSGBUSIMPL_KAFKA_H_ */
+#endif /* MSGBUSIMPL_PULSAR_H_ */

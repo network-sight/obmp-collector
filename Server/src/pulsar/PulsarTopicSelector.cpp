@@ -10,8 +10,8 @@
 #include <arpa/inet.h>
 #include <boost/algorithm/string/replace.hpp>
 
-#include "KafkaTopicSelector.h"
-#include "kafka/MsgBusImpl_kafka.h"
+#include "PulsarTopicSelector.h"
+#include "MsgBusImpl_pulsar.h"
 
 /*********************************************************************//**
  * Constructor for class
@@ -20,40 +20,38 @@
  * \param [in] cfg      Pointer to the config instance
  * \param [in] producer Pointer to the kafka producer
  ***********************************************************************/
-KafkaTopicSelector::KafkaTopicSelector(Logger *logPtr, Config *cfg,  RdKafka::Producer *producer) {
+PulsarTopicSelector::PulsarTopicSelector(::Logger *logPtr, Config *cfg,  pulsar::Client *client) {
     logger = logPtr;
     this->cfg = cfg;
+
+    topicPrefix ="persistent://netsight/netsight/";
 
     if (cfg->debug_msgbus)
         debug = true;
     else
         debug = false;
 
-
-    this->producer = producer;
-
-    peer_partitioner_callback = new KafkaPeerPartitionerCallback();
-    tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
+    this->client = client;
 
 }
 
 /*********************************************************************//**
  * Destructor for class
  ***********************************************************************/
-KafkaTopicSelector::~KafkaTopicSelector() {
-    SELF_DEBUG("Destory KafkaTopicSeletor");
+PulsarTopicSelector::~PulsarTopicSelector() {
+    SELF_DEBUG("Destory PulsarTopicSelector");
 
-    freeTopicMap();
+    freeProducerMap();
 
-    if (peer_partitioner_callback != NULL)
-        delete peer_partitioner_callback;
+    // if (peer_partitioner_callback != NULL)
+    //     delete peer_partitioner_callback;
 
-    delete tconf;
+    // delete tconf;
 
 }
 
 /*********************************************************************//**
- * Gets topic pointer by topic var name, router and peer group.
+ * Gets Pulsar::Producer by topic var name, router and peer group.
  *     If the topic doesn't exist, a new entry will be initialized.
  *
  * \param [in]  topic_var       MSGBUS_TOPIC_VAR_<name>
@@ -61,24 +59,24 @@ KafkaTopicSelector::~KafkaTopicSelector() {
  * \param [in]  peer_group      Peer group - empty/NULL means no peer group
  * \param [in]  peer_asn        Peer asn (remote asn)
  *
- * \return (RdKafka::Topic *) pointer or NULL if error
+ * \return (Pulsar::Producer *) pointer or NULL if error
  ***********************************************************************/
 
-RdKafka::Topic * KafkaTopicSelector::getTopic(const std::string &topic_var,
+Producer * PulsarTopicSelector::getProducer(const std::string &topic_var,
                                               const std::string *router_group, const std::string *peer_group,
                                               uint32_t peer_asn) {
 
     // Update the topic key based on the peer_group/router_group
     std::string topic_key = getTopicKey(topic_var, router_group, peer_group, peer_asn);
 
-    topic_map::iterator t_it;
+    t_producer_map::iterator t_it;
 
-    if ( (t_it=topic.find(topic_key)) != topic.end()) {
-        return t_it->second;                                              // Return the existing initialized topic
+    if ( (t_it=producerMap.find(topic_key)) != producerMap.end()) {
+        return t_it->second;                                              // Return the existing initialized Producer
     }
     else {
-        SELF_DEBUG("Requesting to create topic for key=%s", topic_key.c_str());
-        return initTopic(topic_var, router_group, peer_group, peer_asn);  // create and return newly created topic
+        SELF_DEBUG("Requesting to create producer for key=%s", topic_key.c_str());
+        return initProducer(topic_var, router_group, peer_group, peer_asn);  // create and return newly created Producer
     }
 
     return NULL;
@@ -91,7 +89,7 @@ RdKafka::Topic * KafkaTopicSelector::getTopic(const std::string &topic_var,
  *
  * \return bool true if the topic is enabled, false otherwise
 ***********************************************************************/
-bool KafkaTopicSelector::topicEnabled(const std::string &topic_var) {
+bool PulsarTopicSelector::topicEnabled(const std::string &topic_var) {
     return this->cfg->topic_names_map[topic_var].length() > 0;
 }
 
@@ -105,7 +103,7 @@ bool KafkaTopicSelector::topicEnabled(const std::string &topic_var) {
  *
  * \return bool true if matched, false if no matched peer group
  ***********************************************************************/
-void KafkaTopicSelector::lookupPeerGroup(std::string hostname, std::string ip_addr, uint32_t peer_asn,
+void PulsarTopicSelector::lookupPeerGroup(std::string hostname, std::string ip_addr, uint32_t peer_asn,
                                          std::string &peer_group_name) {
 
     peer_group_name = "";
@@ -218,7 +216,7 @@ void KafkaTopicSelector::lookupPeerGroup(std::string hostname, std::string ip_ad
  *
  * \return bool true if matched, false if no matched peer group
  ***********************************************************************/
-void KafkaTopicSelector::lookupRouterGroup(std::string hostname, std::string ip_addr,
+void PulsarTopicSelector::lookupRouterGroup(std::string hostname, std::string ip_addr,
                                          std::string &router_group_name) {
 
     router_group_name = "";
@@ -309,7 +307,7 @@ void KafkaTopicSelector::lookupRouterGroup(std::string hostname, std::string ip_
 
 
 /**
- * Initialize topic
+ * Initialize producer
  *      Producer must be initialized and connected prior to calling this method.
  *      Topic map will be updated.
  *
@@ -318,9 +316,9 @@ void KafkaTopicSelector::lookupRouterGroup(std::string hostname, std::string ip_
  * \param [in]  peer_group      Peer group - empty/NULL means no peer group
  * \param [in]  peer_asn        Peer asn (remote asn)
  *
- * \return  (RdKafka::Topic *) pointer or NULL if error
+ * \return  (pulsar::Producer *) pointer or NULL if error
  */
-RdKafka::Topic * KafkaTopicSelector::initTopic(const std::string &topic_var,
+Producer * PulsarTopicSelector::initProducer(const std::string &topic_var,
                                                const std::string *router_group, const std::string *peer_group,
                                                uint32_t peer_asn) {
     std::string errstr;
@@ -363,31 +361,36 @@ RdKafka::Topic * KafkaTopicSelector::initTopic(const std::string &topic_var,
         }
     }
 
-    SELF_DEBUG("Creating topic %s (map key=%s)" , topic_name.c_str(), topic_key.c_str());
+    //SELF_DEBUG("Creating topic %s (map key=%s)" , topic_name.c_str(), topic_key.c_str());
 
-    // Delete topic if it already exists
-    topic_map::iterator t_it;
+    // Delete producer if it already exists
+    t_producer_map::iterator t_it;
 
-    if ( (t_it=topic.find(topic_key)) != topic.end() and t_it->second != NULL) {
+    if ( (t_it=producerMap.find(topic_key)) != producerMap.end() and t_it->second != NULL) {
         delete t_it->second;
     }
 
     /*
-     * Topic configuration
+     * Producer configuration
      */
-    if (tconf->set("partitioner_cb", peer_partitioner_callback, errstr) != RdKafka::Conf::CONF_OK) {
-        LOG_ERR("Failed to configure kafka partitioner callback: %s", errstr.c_str());
-        throw "ERROR: Failed to configure kafka partitioner callback";
+
+    Producer * producer = new Producer();
+    std::string full_topic_name = topicPrefix;
+    full_topic_name += topic_name;
+    Result result = client->createProducer(full_topic_name, *producer);
+    
+    if (result != pulsar::ResultOk) {
+        delete producer ;
+        producer = NULL;
     }
 
-    topic[topic_key] = RdKafka::Topic::create(producer, topic_name.c_str(), tconf, errstr);
+    producerMap[topic_key] = producer;
 
-    if (topic[topic_key] == NULL) {
-        LOG_ERR("Failed to create '%s' topic: %s", topic_name.c_str(), errstr.c_str());
-        throw "ERROR: Failed to create topic";
-
+    if (producerMap[topic_key] == NULL) {
+        LOG_ERR("Failed to creating producer for topic : %s", full_topic_name.c_str());
+        throw "ERROR: Failed to create producer";
     } else {
-        return topic[topic_key];
+        return producerMap[topic_key];
     }
 
     return NULL;
@@ -403,7 +406,7 @@ RdKafka::Topic * KafkaTopicSelector::initTopic(const std::string &topic_var,
  *
  * \return string value of the topic key to be used with the topic map
  */
-std::string KafkaTopicSelector::getTopicKey(const std::string &topic_var,
+std::string PulsarTopicSelector::getTopicKey(const std::string &topic_var,
                                             const std::string *router_group, const std::string *peer_group,
                                             uint32_t peer_asn) {
 
@@ -439,12 +442,13 @@ std::string KafkaTopicSelector::getTopicKey(const std::string &topic_var,
 }
 
 /**
- * Free allocated topic map pointers
+ * Free allocated producer map pointers
  */
-void KafkaTopicSelector::freeTopicMap() {
+void PulsarTopicSelector::freeProducerMap() {
     // Free topic pointers
-    for (topic_map::iterator it = topic.begin(); it != topic.end(); it++) {
+    for (t_producer_map::iterator it = producerMap.begin(); it != producerMap.end(); it++) {
         if (it->second) {
+            it->second->close();
             delete it->second;
             it->second = NULL;
         }

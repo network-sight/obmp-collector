@@ -51,7 +51,7 @@ public:
      *  \param [in] config  Pointer to the loaded configuration
      *
      */
-    BMPReader(Logger *logPtr, Config *config);
+    BMPReader(::Logger *logPtr, Config *config);
 
     virtual ~BMPReader();
 
@@ -117,7 +117,7 @@ public:
 
 
 public:
-    Logger      *logger;                    ///< Logging class pointer
+    ::Logger      *logger;                    ///< Logging class pointer
 
 private:
     Config      *cfg;                       ///< Config pointer
