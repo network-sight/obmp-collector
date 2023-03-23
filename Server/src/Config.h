@@ -99,13 +99,13 @@ public:
     typedef std::map<std::string, std::list<uint32_t>>::iterator match_peer_group_by_asn_iter;
 
     /**
-     * kafka topic variables
+     * topic variables
      */
     std::map<std::string, std::string> topic_vars_map;
     typedef std::map<std::string, std::string>::iterator topic_vars_map_iter;
 
     /**
-     * kafka topic names
+     * topic names
      */
     std::map<std::string, std::string> topic_names_map;
     typedef std::map<std::string, std::string>::iterator topic_names_map_iter;
@@ -144,14 +144,14 @@ private:
     void parseDebug(const YAML::Node &node);
 
     /**
-     * Parse the kafka configuration
+     * Parse the pulsar configuration
      *
      * \param [in] node     Reference to the yaml NODE
      */
-    void parseKafka(const YAML::Node &node);
+    void parsePulsar(const YAML::Node &node);
 
     /**
-     * Parse the kafka topics configuration
+     * Parse the pulsar topics configuration
      *
      * \param [in] node     Reference to the yaml NODE
      */

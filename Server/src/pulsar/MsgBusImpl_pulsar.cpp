@@ -147,7 +147,11 @@ void msgBus_pulsar::connect() {
     disconnect();
 
     // Create client and connect
-    client = new  Client(pulsarUrl);
+    ClientConfiguration clientConf;
+    clientConf.setLogger(new ConsoleLoggerFactory(pulsar::Logger::LEVEL_WARN));
+    //clientConf.setLogger(new FileLoggerFactory(pulsar::Logger::LEVEL_DEBUG, "pulsar-client.log"));
+    client = new  Client(pulsarUrl ,clientConf);
+    
     if (client == NULL) {
         LOG_ERR("rtr=%s: Failed to create client: %s", router_ip.c_str(), errstr.c_str());
         throw "ERROR: Failed to create client";
@@ -202,13 +206,17 @@ void msgBus_pulsar::produce(const char *topic_var, char *msg, size_t msg_size, i
 
     // if topic is disabled, don't bother producing the message
     // TODO: it would be more efficient to move this check to the top of the various update_* methods, but I'm not sure which parts of these methods have side-effects that need to be preserved.
-    if (!topicSel->topicEnabled(topic_var))
+    if (!topicSel->topicEnabled(topic_var)){
+        LOG_WARN("#########  topic=%s  not enabled  in  msgbus ....", topic_var);
         return;
+    }
+        
 
     char headers[256];
     len = snprintf(headers, sizeof(headers), "V: %s\nC_HASH_ID: %s\nT: %s\nL: %lu\nR: %d\n\n",
             MSGBUS_API_VERSION, collector_hash.c_str(), topic_var, msg_size, rows);
 
+    bzero(producer_buf , MSGBUS_WORKING_BUF_SIZE);
     memcpy(producer_buf, headers, len);
     memcpy(producer_buf+len, msg, msg_size);
 
@@ -1495,27 +1503,10 @@ bool msgBus_pulsar::resolveIp(string name, string &hostname) {
  * Enable/disable debugs
  */
 void msgBus_pulsar::enableDebug() {
-    string value = "all";
-    string errstr;
-
     disconnect();
-
-    // if (conf->set("debug", value, errstr) != RdKafka::Conf::CONF_OK) {
-    //     LOG_ERR("Failed to enable debug on kafka producer confg: %s", errstr.c_str());
-    // }
-    // todo 
-
     connect();
-
     debug = true;
-
 }
 void msgBus_pulsar::disableDebug() {
-    string errstr;
-    string value = "";
-
-    // if (conf)
-    //     conf->set("debug", value, errstr);
-
     debug = false;
 }

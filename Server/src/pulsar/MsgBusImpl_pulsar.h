@@ -30,7 +30,7 @@ public:
     #define MSGBUS_API_VERSION              "1.7"
 
     /******************************************************************//**
-     * \brief This function will initialize and connect to Kafka.
+     * \brief This function will initialize and connect to pulsar.
      *
      * \details It is expected that this class will start off with a new connection.
      *
@@ -122,7 +122,7 @@ private:
     /**
      * produce message to pulsar
      *
-     * \param [in] topic_var     Topic var to use in KafkaTopicSelector::getTopic()
+     * \param [in] topic_var     Topic var to use in PulsarTopicSelector::getTopic()
      * \param [in] msg           message to produce
      * \param [in] msg_size      Length in bytes of the message
      * \param [in] rows          Number of rows in data

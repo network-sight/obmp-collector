@@ -28,7 +28,7 @@ struct ThreadMgmt {
 };
 
 struct ClientThreadInfo {
-    // msgBus_kafka *mbus;
+
     msgBus_pulsar *mbus;
     BMPListener::ClientInfo *client;
     ::Logger *log;

@@ -77,7 +77,7 @@ void Usage(char *prog) {
 
     cout << endl << "  DEPRECATED OPTIONS:" << endl;
     cout << endl << "       These options will be removed in a future release. You should switch to use the config file." << endl;
-    cout << "     -k <host:port>    Kafka broker list format: host:port[,...]" << endl;
+    cout << "     -k <host:port>    Pulsar broker list format: host:port[,...]" << endl;
     cout << "                       Default is 127.0.0.1:9092" << endl;
     cout << "     -m <mode>         Mode can be 'v4, v6, or v4v6'" << endl;
     cout << "                       Default is v4.  Enables IPv4 and/or IPv6 BMP listening port" << endl;
@@ -361,11 +361,11 @@ bool ReadCmdArgs(int argc, char **argv, Config &cfg) {
 /**
  * Collector Update Message
  *
- * \param [in] kafka                 Pointer to kafka instance
+ * \param [in] msgbus                 Pointer to msgbus instance
  * \param [in] cfg                   Reference to configuration
  * \param [in] code                  reason code for the update
  */
-void collector_update_msg(msgBus_pulsar *kafka, Config &cfg,
+void collector_update_msg(msgBus_pulsar *msgbus, Config &cfg,
                           MsgBusInterface::collector_action_code code) {
 
     MsgBusInterface::obj_collector oc;
@@ -390,7 +390,7 @@ void collector_update_msg(msgBus_pulsar *kafka, Config &cfg,
     oc.timestamp_secs = tv.tv_sec;
     oc.timestamp_us = tv.tv_usec;
 
-    kafka->update_Collector(oc, code);
+    msgbus->update_Collector(oc, code);
 }
 
 /**
@@ -417,7 +417,7 @@ void runServer(Config &cfg) {
         memcpy(cfg.c_hash_id, hash_raw, 16);
         delete[] hash_raw;
 
-        // Kafka connection
+        // pulsar connection
         msgbus = new msgBus_pulsar(logger, &cfg, cfg.c_hash_id);
 
         // allocate and start a new bmp server
@@ -570,6 +570,9 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+
+    // refresh timezone;
+    tzset();
 
     // Make sure we have the required ARGS
     if (strlen(cfg.admin_id) <= 0) {

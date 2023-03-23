@@ -18,7 +18,7 @@
  *
  * \param [in] logPtr   Pointer to Logger instance
  * \param [in] cfg      Pointer to the config instance
- * \param [in] producer Pointer to the kafka producer
+ * \param [in] client Pointer to the pulsar client
  ***********************************************************************/
 PulsarTopicSelector::PulsarTopicSelector(::Logger *logPtr, Config *cfg,  pulsar::Client *client) {
     logger = logPtr;

@@ -188,7 +188,7 @@ void Logger::printV(const char *sev,
 
     // Get current time
     gettimeofday(&tv,NULL);
-    gmtime_r(&tv.tv_sec, &t);
+    localtime_r(&tv.tv_sec, &t);
     strftime(time_str,sizeof(time_str), "%Y-%m-%dT%H:%M:%S", &t);
 
     // If we have a filename, include it in the print

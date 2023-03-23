@@ -101,8 +101,8 @@ void Config::load(const char *cfg_filename) {
                         parseBase(node);
                     else if (key.compare("debug") == 0)
                         parseDebug(node);
-                    else if (key.compare("kafka") == 0)
-                        parseKafka(node);
+                    else if (key.compare("pulsar") == 0)
+                        parsePulsar(node);
                     else if (key.compare("mapping") == 0)
                         parseMapping(node);
 
@@ -362,11 +362,11 @@ void Config::parseDebug(const YAML::Node &node) {
 }
 
 /**
- * Parse the kafka configuration
+ * Parse the pulsar configuration
  *
  * \param [in] node     Reference to the yaml NODE
  */
-void Config::parseKafka(const YAML::Node &node) {
+void Config::parsePulsar(const YAML::Node &node) {
     std::string value;
 
     if (node["brokers"] && node["brokers"].Type() == YAML::NodeType::Sequence) {
@@ -383,7 +383,7 @@ void Config::parseKafka(const YAML::Node &node) {
             }
 
             if (debug_general)
-                std::cout << "   Config: kafka.brokers = " << brokers << "\n";
+                std::cout << "   Config: pulsar.brokers = " << brokers << "\n";
         }
     }
 
@@ -562,7 +562,7 @@ void Config::parseKafka(const YAML::Node &node) {
 
 
 /**
- * Parse the kafka topics configuration
+ * Parse the pulsar topics configuration
  *
  * \param [in] node     Reference to the yaml NODE
  */
@@ -578,13 +578,13 @@ void Config::parseTopics(const YAML::Node &node) {
                     topic_vars_map[var] = it->second.as<std::string>();
 
             } catch (YAML::TypedBadConversion<std::string> err) {
-                printWarning("kafka.topics.variables error in map.  Make sure to define var: <string value>", it->second);
+                printWarning("pulsar.topics.variables error in map.  Make sure to define var: <string value>", it->second);
             }
         }
 
         if (debug_general) {
             for (topic_vars_map_iter it = topic_vars_map.begin(); it != topic_vars_map.end(); ++it) {
-                std::cout << "   Config: kafka.topics.variables: " << it->first << " = " << it->second << std::endl;
+                std::cout << "   Config: pulsar.topics.variables: " << it->first << " = " << it->second << std::endl;
             }
         }
     }
@@ -605,13 +605,13 @@ void Config::parseTopics(const YAML::Node &node) {
 
 
             } catch (YAML::TypedBadConversion<std::string> err) {
-                printWarning("kafka.topics.names error in map.  Make sure to define var: <string value>", it->second);
+                printWarning("pulsar.topics.names error in map.  Make sure to define var: <string value>", it->second);
             }
         }
 
         if (debug_general) {
             for (topic_names_map_iter it = topic_names_map.begin(); it != topic_names_map.end(); ++it) {
-                std::cout << "   Config: kafka.topics.names: " << it->first << " = " << it->second << std::endl;
+                std::cout << "   Config: pulsar.topics.names: " << it->first << " = " << it->second << std::endl;
             }
         }
     }
@@ -621,7 +621,7 @@ void Config::parseTopics(const YAML::Node &node) {
 
     if (debug_general) {
         for (topic_names_map_iter it = topic_names_map.begin(); it != topic_names_map.end(); ++it) {
-            std::cout << "   Config: postsub: kafka.topics.names: " << it->first << " = " << it->second << std::endl;
+            std::cout << "   Config: postsub: pulsar.topics.names: " << it->first << " = " << it->second << std::endl;
         }
     }
 }

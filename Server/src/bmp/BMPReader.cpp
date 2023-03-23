@@ -277,7 +277,7 @@ bool BMPReader::ReadIncomingMsg(BMPListener::ClientInfo *client, MsgBusInterface
                         if (mirror_tlv.type == 0 /* BGP message */) {
                             /*
                              * Read and parse the the BGP message from the client.
-                             *     parseBGP will update kafka directly
+                             *     parseBGP will update pulsar directly
                              */
                             pBGP = new parseBGP(logger, mbus_ptr, &p_entry, (char *)r_object.ip_addr,
                                                 &peer_info_map[peer_info_key]);
@@ -307,7 +307,7 @@ bool BMPReader::ReadIncomingMsg(BMPListener::ClientInfo *client, MsgBusInterface
 
                 /*
                  * Read and parse the the BGP message from the client.
-                 *     parseBGP will update kafka directly
+                 *     parseBGP will update pulsar directly
                  */
                 pBGP = new parseBGP(logger, mbus_ptr, &p_entry, (char *)r_object.ip_addr,
                                     &peer_info_map[peer_info_key]);

@@ -653,7 +653,7 @@ public:
             us = time_us;
         }
 
-        p_tm = std::gmtime(&secs);
+        p_tm = localtime(&secs);
         std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", p_tm);
         ts_str = buf;
 

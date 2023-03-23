@@ -10,10 +10,10 @@
 #ifndef OPENBMP_PULSARTOPICSELECTOR_H
 #define OPENBMP_PULSARTOPICSELECTOR_H
 
-// #include <librdkafka/rdkafkacpp.h>
+
 #include "Config.h"
 #include "Logger.h"
-// #include "KafkaPeerPartitionerCallback.h"
+
 #include <pulsar/Client.h>
 
 using namespace pulsar;
