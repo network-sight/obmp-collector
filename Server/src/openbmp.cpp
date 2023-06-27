@@ -70,7 +70,7 @@ void Usage(char *prog) {
 
 
     cout << endl << "  DEBUG OPTIONS:" << endl;
-    cout << "     -debug"           "Debug general items" << endl;
+    cout << "     -debug            Debug general items" << endl;
     cout << "     -dbgp             Debug BGP parser" <<  endl;
     cout << "     -dbmp             Debug BMP parser" << endl;
     cout << "     -dmsgbus          Debug message bus" << endl;

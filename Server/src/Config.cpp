@@ -554,9 +554,29 @@ void Config::parsePulsar(const YAML::Node &node) {
         }
     }
 
+    // default pulsar topic prefix
+    topic_prefix="persistent://public/default/";
+    
+    if (node["topic.prefix"]  && 
+        node["topic.prefix"].Type() == YAML::NodeType::Scalar) {
+        try {
+            if (topic_prefix.size()  > 0 )
+                topic_prefix = node["topic.prefix"].as<std::string>();
+
+        } catch (YAML::TypedBadConversion<std::string> err) {
+                printWarning("topic.prefix is not of type string", 
+				node["topic.prefix"]);
+        }
+    }
+    if (debug_general)
+        std::cout << "   Config: topic.prefix : " << 
+             topic_prefix << std::endl;
+
+
     if (node["topics"] && node["topics"].Type() == YAML::NodeType::Map) {
         parseTopics(node["topics"]);
     }
+    
 }
 
 

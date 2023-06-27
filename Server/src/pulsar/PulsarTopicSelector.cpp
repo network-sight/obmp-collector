@@ -24,7 +24,7 @@ PulsarTopicSelector::PulsarTopicSelector(::Logger *logPtr, Config *cfg,  pulsar:
     logger = logPtr;
     this->cfg = cfg;
 
-    topicPrefix ="persistent://netsight/netsight/";
+    topicPrefix = cfg->topic_prefix ;
 
     if (cfg->debug_msgbus)
         debug = true;
@@ -42,11 +42,6 @@ PulsarTopicSelector::~PulsarTopicSelector() {
     SELF_DEBUG("Destory PulsarTopicSelector");
 
     freeProducerMap();
-
-    // if (peer_partitioner_callback != NULL)
-    //     delete peer_partitioner_callback;
-
-    // delete tconf;
 
 }
 

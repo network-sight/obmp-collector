@@ -228,7 +228,8 @@ void msgBus_pulsar::produce(const char *topic_var, char *msg, size_t msg_size, i
                    producer->getTopic().c_str(), key.c_str(), msg_size);
 
          // Send synchronously
-        Message message = MessageBuilder().setContent((char*) producer_buf).build();
+        Message message = MessageBuilder().setProperty("BMP_HASH_KEY" ,key).setContent((char*) producer_buf).build();
+        
         Result result = producer->send(message);
         
         if (result != ResultOk) {
@@ -1088,7 +1089,7 @@ void msgBus_pulsar::update_LsNode(obj_bgp_peer &peer, obj_path_attr &attr, std::
         }
 
         buf_len += snprintf(buf2, sizeof(buf2),
-                        "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIx64 "\t%" PRIx32 "\t%s"
+                        "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIu64 "\t%" PRIx32 "\t%s"
                                 "\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%" PRIu32 "\t%s\t%s\t%d\t%d\t%s\n",
                         action.c_str(),ls_node_seq, hash_str.c_str(),path_hash_str.c_str(), r_hash_str.c_str(),
                         router_ip.c_str(), peer_hash_str.c_str(), peer.peer_addr, peer.peer_as, ts.c_str(),
@@ -1250,7 +1251,7 @@ void msgBus_pulsar::update_LsLink(obj_bgp_peer &peer, obj_path_attr &attr, std::
 
 
         buf_len += snprintf(buf2, sizeof(buf2),
-                "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIx64 "\t%" PRIx32 "\t%s\t%s\t%s\t%s\t%"
+                "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIu64 "\t%" PRIx32 "\t%s\t%s\t%s\t%s\t%"
                         PRIu32 "\t%" PRIu32 "\t%s\t%" PRIx32 "\t%" PRIu32 "\t%" PRIu32 "\t%s\t%s\t%" PRIu32 "\t%" PRIu32
                         "\t%" PRIu32 "\t%" PRIu32 "\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 ""
                         "\t%" PRIu32 "\t%s\t%d\t%d\t%s\n",
@@ -1396,7 +1397,7 @@ void msgBus_pulsar::update_LsPrefix(obj_bgp_peer &peer, obj_path_attr &attr, std
 
 
         buf_len += snprintf(buf2, sizeof(buf2),
-                "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIx64 "\t%" PRIx32
+                "%s\t%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%s\t%s\t%s\t%" PRIu64 "\t%" PRIx32
                         "\t%s\t%s\t%s\t%s\t%" PRIu32 "\t%" PRIu32 "\t%s\t%s\t%" PRIx32 "\t%s\t%s\t%" PRIu32 "\t%" PRIx64
                             "\t%s\t%" PRIu32 "\t%s\t%d\t%d\t%d\t%s\n",
                             action.c_str(), ls_prefix_seq, hash_str.c_str(), path_hash_str.c_str(), r_hash_str.c_str(),

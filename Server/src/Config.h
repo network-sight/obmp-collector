@@ -62,6 +62,8 @@ public:
     int         initial_router_time;     ///<Initial time in allowing another concurrent router
     bool        calculate_baseline;      ///<Indicates if router baseline time should be calculated
     bool        pat_enabled;             ///<Indicates if router hash needs to be based on INIT message instead of source IP
+    
+    std::string topic_prefix;           // pulsar topic prefix  format as  "persistent://tenant/namespace" , default  "persistent://public/default/"
 
     /**
      * matching structs and maps
