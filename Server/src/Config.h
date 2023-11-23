@@ -65,6 +65,8 @@ public:
     
     std::string topic_prefix;           // pulsar topic prefix  format as  "persistent://tenant/namespace" , default  "persistent://public/default/"
 
+    bool        dummy_producer_enabled ; 
+
     /**
      * matching structs and maps
      */

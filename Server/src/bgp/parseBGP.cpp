@@ -372,7 +372,7 @@ void parseBGP::UpdateDB(bgp_msg::UpdateMsg::parsed_update_data &parsed_data) {
     /*
      * Update withdraws (both ipv4 and ipv6)
      */
-    UpdateDBWdrawnPrefixes(parsed_data.withdrawn);
+    UpdateDBWdrawnPrefixes(parsed_data.withdrawn,parsed_data.attrs);
 
 }
 
@@ -720,8 +720,9 @@ void parseBGP::UpdateDBAdvPrefixes(std::list<bgp::prefix_tuple> &adv_prefixes,
  * \details This method will update the database for the supplied advertised prefixes
  *
  * \param  wdrawn_prefixes         Reference to the list<prefix_tuple> of withdrawn prefixes
+ * \param  attrs            Reference to the parsed attributes map
  */
-void parseBGP::UpdateDBWdrawnPrefixes(std::list<bgp::prefix_tuple> &wdrawn_prefixes) {
+void parseBGP::UpdateDBWdrawnPrefixes(std::list<bgp::prefix_tuple> &wdrawn_prefixes, bgp_msg::UpdateMsg::parsed_attrs_map &attrs) {
     vector<MsgBusInterface::obj_rib> rib_list;
     MsgBusInterface::obj_rib         rib_entry;
 
@@ -754,7 +755,7 @@ void parseBGP::UpdateDBWdrawnPrefixes(std::list<bgp::prefix_tuple> &wdrawn_prefi
 
     // Update the DB
     if (rib_list.size() > 0)
-        mbus_ptr->update_unicastPrefix(*p_entry, rib_list, NULL, mbus_ptr->UNICAST_PREFIX_ACTION_DEL);
+        mbus_ptr->update_unicastPrefix(*p_entry, rib_list, &base_attr, mbus_ptr->UNICAST_PREFIX_ACTION_DEL);
 
     rib_list.clear();
     wdrawn_prefixes.clear();

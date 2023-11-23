@@ -390,7 +390,7 @@ bool BMPReader::ReadIncomingMsg(BMPListener::ClientInfo *client, MsgBusInterface
     }
     
     // Send BMP RAW packet data
-    if (client->initRec) // Require router init first
+    if (client->initRec && (not cfg->dummy_producer_enabled)) // Require router init first
         mbus_ptr->send_bmp_raw(router_hash_id, p_entry, pBMP->bmp_packet, pBMP->bmp_packet_len);
 
     // Free the bmp parser

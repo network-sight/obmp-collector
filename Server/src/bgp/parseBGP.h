@@ -209,8 +209,9 @@ private:
      * \details This method will update the database for the supplied advertised prefixes
      *
      * \param  wdrawn_prefixes         Reference to the list<prefix_tuple> of withdrawn prefixes
+     * \param  attrs            Reference to the parsed attributes map
      */
-    void UpdateDBWdrawnPrefixes(std::list<bgp::prefix_tuple> &wdrawn_prefixes);
+    void UpdateDBWdrawnPrefixes(std::list<bgp::prefix_tuple> &wdrawn_prefixes, bgp_msg::UpdateMsg::parsed_attrs_map &attrs);
 
     /**
      * Update the Database advertised l3vpn 

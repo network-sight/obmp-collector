@@ -19,7 +19,10 @@ find_package(CURL REQUIRED)
 message("CURL_INCLUDE_DIRS: " ${CURL_INCLUDE_DIRS})
 message("CURL_LIBRARIES: " ${CURL_LIBRARIES})
 
-# Find and set the env for the mysql c++ connector
+# Find and set the env 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+
 set(HINT_ROOT_DIR
         "${HINT_ROOT_DIR}"
         CACHE
@@ -108,8 +111,6 @@ endif()
 # include_directories(${LIBRDKAFKA_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ src/bmp src/bgp src/bgp/linkstate src/kafka src/pulsar)
 include_directories(${LIBPULSAR_INCLUDE_DIR} ${LIBYAML_CPP_INCLUDE_DIR} src/ src/bmp src/bgp src/bgp/linkstate src/pulsar)
 
-#link_directories(${LIBRDKAFKA_LIBRARY})
-
 
 # Define the source files to compile
 set (SRC_FILES
@@ -154,6 +155,8 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR CMAKE_COMPILER_IS_GNUCXX)
         message(ERROR "Compiler does not support --std=c++11 or --std=c++0x. Upgrade gcc 4.7 or greater")
     endif()
 endif()
+
+Message ("CMAKE_C_FLAGS = " ${CMAKE_C_FLAGS})
 
 # Set the libs to link
 set (LIBS pthread ${LIBYAML_CPP_LIBRARY} ${LIBPULSAR_LIBRARY}  z ${SSL_LIBS} ${LIBLZ4_LIBRARY} ${LIBZSTD_LIBRARY} dl crypto )

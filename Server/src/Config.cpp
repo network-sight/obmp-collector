@@ -56,6 +56,8 @@ Config::Config() {
     pat_enabled		= false;
     bzero(admin_id, sizeof(admin_id));
 
+    dummy_producer_enabled = false;
+
     /*
      * Initialized the topic names
      *      The keys match the configuration node/vars. Topic name nodes will be ignored if
@@ -387,6 +389,18 @@ void Config::parsePulsar(const YAML::Node &node) {
         }
     }
 
+    if (!dummy_producer_enabled and node["dummy.producer.enabled"]) {
+        try {
+            dummy_producer_enabled = node["dummy.producer.enabled"].as<bool>();
+
+            if (dummy_producer_enabled)
+                std::cout << "   Config: dummy.producer.enabled : " << dummy_producer_enabled << std::endl;
+
+        } catch (YAML::TypedBadConversion<bool> err) {
+            printWarning("dummy.producer.enabled is not of type boolean", node["dummy.producer.enabled"]);
+        }
+    }
+
     if (node["message.max.bytes"] && node["message.max.bytes"].Type() == YAML::NodeType::Scalar) {
        try {
             tx_max_bytes = node["message.max.bytes"].as<int>();
@@ -616,6 +630,8 @@ void Config::parseTopics(const YAML::Node &node) {
                 if (topic_names_map.find(it->first.as<std::string>()) != topic_names_map.end()) {
                     if (it->second.Type() == YAML::NodeType::Null) {
                         topic_names_map[it->first.as<std::string>()] = "";
+                        std::cout << "   Ignore: '" << it->first.as<std::string>()
+                              << "' is disabled" << std::endl;
                     } else {
                         topic_names_map[it->first.as<std::string>()] = it->second.as<std::string>();
                     }
